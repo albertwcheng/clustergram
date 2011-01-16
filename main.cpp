@@ -2,6 +2,7 @@
 using namespace std;
 
 #include <sam.h>
+#include "AdvGetOpt.h"
 
 int fetch_func(const bam1_t *b, void *data)  
 {  
@@ -11,10 +12,47 @@ int fetch_func(const bam1_t *b, void *data)
 
 int main(int argc,char*argv[])
 {
-	if(argc<3){
+	/*if(argc<3){
 		cerr<<"Usage: samTry sortedBamFile region[chr:start-end]"<<endl;
 		return 1;
+	}*/
+	
+	vector<OptStruct> opts;
+	vector<string> args;
+	vector<string> preprocessed_in_args;
+	vector<string> processed_in_args;
+	vector<string> long_options;
+	long_options.push_back("long-1");
+	long_options.push_back("long-2=");
+	
+	bool success;
+	
+	string programName=argv2vectorOfString(preprocessed_in_args,argc,argv);
+	success=preprocessFileLoadableArgs(preprocessed_in_args,processed_in_args);
+	if(!success){
+		cerr<<"preprocessing failed"<<endl;
+		return 1;
 	}
+	success=getopt(opts,args,processed_in_args, "ab:c",&long_options);
+	if(!success){
+		cerr<<"getopt failed"<<endl;
+		return 1;
+	}
+	
+	for(vector<OptStruct>::iterator i=opts.begin();i!=opts.end();i++)
+	{
+		cerr<<"option "<<i->opname<<" : "<<i->opvalue<<endl;
+	}
+	
+	for(unsigned int i=0;i<args.size();i++)
+	{
+		cerr<<"args "<<i<<" : "<<args[i]<<endl;
+	}
+	
+	return 0;
+	
+	
+	
 	
 	char *filename=argv[1];
 	char *region=argv[2];
