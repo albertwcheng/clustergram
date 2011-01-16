@@ -1,0 +1,9 @@
+1) Downlaod samtools and place under this folder
+http://samtools.sourceforge.net/
+2) build samtools. 
+cd samtools
+make
+cd ..
+3) build clustergram
+bash make.sh
+
