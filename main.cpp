@@ -21,7 +21,7 @@
 using namespace std;
 
 #include <sam.h>
-#include "AdvGetOpt.h"
+#include "AdvGetOptCpp/AdvGetOpt.h"
 
 int fetch_func(const bam1_t *b, void *data)  
 {  

@@ -17,4 +17,4 @@ if [ ! -e samtools/libbam.a ]; then
 	exit
 fi
 
-g++ -Wall -o clustergram -I./samtools/ -L./samtools/ -lbam -lm -lz *.cpp samtools/libbam.a
+g++ -Wall -o clustergram -I./samtools/ -L./samtools/ -lbam -lm -lz *.cpp samtools/libbam.a AdvGetOptCpp/AdvGetOpt.cpp
