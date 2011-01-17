@@ -1,0 +1,7 @@
+--reads-per-million
+--use-transcript-start-only
+--bedfile	/lab/jaenisch_albert/genomes/mm8/refGene_mm8.bed
+--upstream-num-bins	40
+--downstream-num-bins	40
+--get-total-number-of-reads-from-bam
+--target-read-file	s_5_sequence.mapview.q50.m1.sorted.bam

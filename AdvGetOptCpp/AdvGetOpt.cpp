@@ -240,7 +240,7 @@ EasyAdvGetOptOut easyAdvGetOpt(int argc,char* argv[],string options,vector<strin
 }
 
 void parseOptsIntoMap(vector<OptStruct>& opts,map<string,string>& optmap){
-	for(vector<OptStruct>::iterator i=opts.begin();i!=opts.end();i++)
+	for(vector<OptStruct>::reverse_iterator i=opts.rbegin();i!=opts.rend();i++) //the latter values have more precedence!
 		optmap.insert(map<string,string>::value_type(i->opname,i->opvalue));
 }
 void parseOptsIntoMultiMap(vector<OptStruct>& opts,multimap<string,string>& optmap){

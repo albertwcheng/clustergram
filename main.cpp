@@ -19,10 +19,14 @@
 
 #include <iostream>
 #include <fstream>
+#include <set>
 using namespace std;
 
 #include <sam.h>
+
 #include "AdvGetOptCpp/AdvGetOpt.h"
+
+
 
 int fetch_func(const bam1_t *b, void *data)  
 {  
@@ -90,17 +94,25 @@ int countTotalNumOfReadsInBam(string bamfile){
 	int total=0;
 	samfile_t* bf=samopen(bamfile.c_str(),"rb",0);
 	
+	
+	
 	if(!bf){
 		cerr<<"bam file "<<bamfile<<" cannot be open for counting"<<endl;
 		return -1;
 	}
 	
 	//now do the counting
-	bam1_t dummy;
-	while(bam_read1(bf->x.bam,&dummy)>0){
+	bam1_t *dummy=bam_init1();
+	
+	
+	while(samread(bf,dummy)>=0){
 		total++;
+		if(total%1000000==1){
+			cerr<<"passing through read "<<total<<endl;
+		}
 	}
 	
+	bam_destroy1(dummy);
 	samclose(bf);
 	return total;
 }
@@ -148,7 +160,7 @@ public:
 		char* pch;
 		pch=strtok(tmp,"\t");
 		chrom=pch;
-		int fieldNo=1;
+		int fieldNo=0;
 		while(pch!=NULL){
 			switch (fieldNo) {
 				case 1:
@@ -170,6 +182,7 @@ public:
 				case 5:
 					strand=pch[0];
 					break;
+
 				default:
 					break;
 			}
@@ -210,6 +223,7 @@ void output_vector(ostream& os,vector<string>& voutput,string delimiter){
 	i++;
 	while(i!=voutput.end()){
 		os<<delimiter<<*i;
+		i++;
 	}
 	os<<endl;
 }
@@ -238,7 +252,14 @@ void fetch_bin_values(vector<double>& voutput,samfile_t* bamfile,bam_index_t*idx
 	}
 }
 
+inline bool isChromInBam(set<string>& chromsInBam,const string& chrom){
+	return chromsInBam.find(chrom)!=chromsInBam.end();
+}
+
+
 int runClustergram(clustergram_opts& clustergramOpts){
+	
+
 	
 	if(clustergramOpts.getTotalNumOfReadsFromBam){
 	   cerr<<"couting total number of reads"<<endl;
@@ -264,7 +285,12 @@ int runClustergram(clustergram_opts& clustergramOpts){
 	}
 	
 
+	set<string> chromsInBam;
 	
+	for(int i=0;i<bamfile->header->n_targets;i++){
+		cerr<<"bam file has reference "<<bamfile->header->target_name[i]<<endl;
+		chromsInBam.insert(bamfile->header->target_name[i]);
+	}
 	
 	int unamedNo=1;
 	
@@ -290,12 +316,19 @@ int runClustergram(clustergram_opts& clustergramOpts){
 	
 	bool firstOutputLine=true;
 	
+	int bedEntryNo=0;
+	
+	
 	while(bedfil.good()){
 		lino++;
 		strcpy(buff,"");
 		bedfil.getline(buff,FILE_BUFFER_SIZE);
 		if(strlen(buff)==0)
 			continue;
+		
+		if(string(buff).substr(0,5)=="track"){
+			continue;
+		}
 		
 		BedEntry bedEntry(buff,"");
 		if(bedEntry.name==""){
@@ -316,12 +349,24 @@ int runClustergram(clustergram_opts& clustergramOpts){
 		
 		if(clustergramOpts.useTranscriptStartOnly){
 			if(bedEntry.strand==STRAND_REVERSE){
-				
-			}else{
 				bedEntry.start0=bedEntry.end1-1;
+			}else{
+				
 			}
 			
 			bedEntry.end1=bedEntry.start0+1;
+		}
+		
+		
+		bedEntryNo++;
+		
+		if(bedEntryNo%10000==1){
+			cerr<<"processing bed entry "<<bedEntryNo<<" ..."<<endl;
+		}
+		
+		if(!isChromInBam(chromsInBam, bedEntry.chrom)){
+			cerr<<"bedEntry "<<bedEntry.name<<" @"<<bedEntry.chrom<<" rejected becuase "<<bedEntry.chrom<<" not found in bam file"<<endl;
+			continue;
 		}
 		
 		//now the real deal here
@@ -469,7 +514,7 @@ int main(int argc,char*argv[])
 	long_options.push_back("use-bed-start");
 	long_options.push_back("bed-start-is-base1");
 	long_options.push_back("use-transcript-start-only");
-	long_options.push_back("total-num-reads");
+	long_options.push_back("total-num-reads=");
 	long_options.push_back("get-total-number-of-reads-from-bam");
 	
 	map<string,string> optmap;
@@ -535,6 +580,7 @@ int main(int argc,char*argv[])
 	}
 	
 	bam_index_t*idx=bam_index_load(filename);
+		
 	if(!idx){
 		cerr<<"Fail to load index\n"<<endl;
 		return 1;
