@@ -23,6 +23,10 @@
 
 #include <vector>
 #include <string>
+#include <iostream>
+#include <map>
+
+
 using namespace std;
 
 class OptStruct{
@@ -32,8 +36,39 @@ public:
 	inline OptStruct(const string& _opname,const string& _opvalue):opname(_opname),opvalue(_opvalue){}
 };
 
+class EasyAdvGetOptOut{
+public:
+	string programName;
+	vector<OptStruct> opts;
+	vector<string> args;
+	bool success;
+	inline EasyAdvGetOptOut():success(false){}
+	inline EasyAdvGetOptOut(string _programName,vector<OptStruct>& _opts,vector<string>& _args,bool _success):programName(_programName),opts(_opts),args(_args),success(_success){}
+	inline void print(ostream& os=cout){
+		for(vector<OptStruct>::iterator i=opts.begin();i!=opts.end();i++)
+		{
+			os<<"option "<<i->opname<<" : "<<i->opvalue<<endl;
+		}
+		
+		for(unsigned int i=0;i<args.size();i++)
+		{
+			os<<"args "<<i<<" : "<<args[i]<<endl;
+		}
+		
+	}
+};
+
 string argv2vectorOfString(vector<string>& vectorOfString,int argc,char* argv[]); //return programName
 bool preprocessFileLoadableArgs(vector<string>& args,vector<string>& processedArgs);
 bool getopt(vector<OptStruct>& out_opts,vector<string>& out_args,vector<string> &in_args, string options,vector<string>* long_options=NULL);
+EasyAdvGetOptOut easyAdvGetOpt(int argc,char* argv[],string options,vector<string>* long_options=NULL);
+void parseOptsIntoMap(vector<OptStruct>& opts,map<string,string>& optmap);
+void parseOptsIntoMultiMap(vector<OptStruct>& opts,multimap<string,string>& optmap);
+bool hasOpt(map<string,string>& optmap,const string& key);
+bool hasOpt(multimap<string,string>& optmap,const string& key);
+string getOptValue(map<string,string>& optmap,const string& key,const string& defaultValue="");
+bool getOptValues(vector<string>& values, multimap<string,string>& optmap,const string& key);
+bool checkRequiredOpts(map<string,string>& optmap,vector<string>& requiredOpts,const char*message="Error: option %s not specified.\n");
+bool checkRequiredOpts(multimap<string,string>& optmap,vector<string>& requiredOpts,const char*message="Error: option %s not specified.\n");
 
 #endif /*_ADV_GET_OPT_H*/

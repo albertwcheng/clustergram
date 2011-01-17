@@ -23,6 +23,7 @@
 #include <map>
 #include <iostream>
 #include <fstream>
+#include <stdlib.h>
 using namespace std;
 
 #define FILE_BUFFER_LENGTH 10240
@@ -84,12 +85,24 @@ bool preprocessFileLoadableArgs(vector<string>& args,vector<string>& processedAr
 			{
 				string& filename=args[i+1];
 				ifstream fil(filename.c_str());
+				if(!fil.good()){
+					//file not good
+					cerr<<"error: arg file "<<filename<<" not good"<<endl;
+					return 1;
+				}
+				
 				while(fil.good())
 				{	
 					strcpy(buffer,"");
 					fil.getline(buffer,FILE_BUFFER_LENGTH);
+					
 					if(strlen(buffer)<1)
 						break; //no more to load
+					
+					if(buffer[0]=='#'){
+						//ignore this commented line
+						continue;
+					}
 					
 					char* pch;
 					pch=strtok(buffer,FILE_ARGS_SPLIT);
@@ -211,4 +224,99 @@ bool getopt(vector<OptStruct>& out_opts,vector<string>& out_args,vector<string> 
 		   
 	return true;
 	
+}
+
+EasyAdvGetOptOut easyAdvGetOpt(int argc,char* argv[],string options,vector<string>* long_options){
+	vector<string> preprocessed_in_args;
+	vector<string> processed_in_args;
+	EasyAdvGetOptOut output;
+	output.programName=argv2vectorOfString(preprocessed_in_args,argc,argv);
+	output.success=preprocessFileLoadableArgs(preprocessed_in_args,processed_in_args);
+	if(!output.success)
+		return output;
+	output.success=getopt(output.opts,output.args,processed_in_args, options,long_options);
+	
+	return output;
+}
+
+void parseOptsIntoMap(vector<OptStruct>& opts,map<string,string>& optmap){
+	for(vector<OptStruct>::iterator i=opts.begin();i!=opts.end();i++)
+		optmap.insert(map<string,string>::value_type(i->opname,i->opvalue));
+}
+void parseOptsIntoMultiMap(vector<OptStruct>& opts,multimap<string,string>& optmap){
+	for(vector<OptStruct>::iterator i=opts.begin();i!=opts.end();i++)
+		optmap.insert(multimap<string,string>::value_type(i->opname,i->opvalue));
+}
+bool hasOpt(map<string,string>& optmap,const string& key){
+	return !(optmap.find(key)==optmap.end());
+}
+bool hasOpt(multimap<string,string>&optmap,const string& key){
+	return !(optmap.find(key)==optmap.end());	
+}
+string getOptValue(map<string,string>& optmap,const string& key,const string& defaultValue){
+	map<string,string>::iterator findI=optmap.find(key);
+	if(findI==optmap.end())
+		return defaultValue;
+	
+	return findI->second;
+}
+bool getOptValues(vector<string>& values, multimap<string,string>& optmap,const string& key){
+	values.clear();
+	pair<multimap<string,string>::iterator,multimap<string,string>::iterator> findI=optmap.equal_range(key);
+	if(findI.first==optmap.end())
+		return false;
+	
+	for(multimap<string,string>::iterator i=findI.first;i!=findI.second;i++)
+		values.push_back(i->second);
+	
+	return true;
+}
+
+bool checkRequiredOpts(map<string,string>& optmap,vector<string>& requiredOpts,const char*message){
+	bool ok=true;
+	for(vector<string>::iterator i=requiredOpts.begin();i!=requiredOpts.end();i++)
+	{
+		string optname=*i;
+		if (optname[0]!='-') {
+			if(optname.length()==1){
+				optname="-"+optname;
+			}
+			else{
+				optname="--"+optname;
+			}
+		}
+		if(optname[optname.length()-1]=='=')
+			optname.erase(optname.length()-1);
+		
+		if(!hasOpt(optmap,optname)){
+			ok=false;
+			fprintf(stderr,message,optname.c_str());
+		}
+	}
+	
+	return ok;
+}
+bool checkRequiredOpts(multimap<string,string>& optmap,vector<string>& requiredOpts,const char*message){
+	bool ok=true;
+	for(vector<string>::iterator i=requiredOpts.begin();i!=requiredOpts.end();i++)
+	{
+		string optname=*i;
+		if (optname[0]!='-') {
+			if(optname.length()==1){
+				optname="-"+optname;
+			}
+			else{
+				optname="--"+optname;
+			}
+		}
+		if(optname[optname.length()-1]=='=')
+			optname.erase(optname.length()-1);
+		
+		if(!hasOpt(optmap,optname)){
+			ok=false;
+			fprintf(stderr,message,optname.c_str());
+		}
+	}
+	
+	return ok;
 }
