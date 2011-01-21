@@ -378,8 +378,12 @@ int runClustergram(clustergram_opts& clustergramOpts){
 		
 		vector<string> voutput;
 		
+
+		int center0=bedEntry.getLength()/2+bedEntry.start0;
+		
+		
 		if(clustergramOpts.alignStartBinCenter){
-			int center0=bedEntry.getLength()/2+bedEntry.start0;
+			
 			int startBinStart0=center0-clustergramOpts.binSize/2;
 			if(bedEntry.strand==STRAND_REVERSE && !clustergramOpts.useGenomicStrand){
 				//use reverse
@@ -395,13 +399,14 @@ int runClustergram(clustergram_opts& clustergramOpts){
 			
 		}
 		else {
+			int startBinStart0=center0;
 			
 			if(bedEntry.strand==STRAND_REVERSE && !clustergramOpts.useGenomicStrand){
 				reverseData=true;
-				ultimateStart0=bedEntry.start0-(clustergramOpts.downstreamNumBins-1)*clustergramOpts.binSize;
+				ultimateStart0=startBinStart0-(clustergramOpts.downstreamNumBins-1)*clustergramOpts.binSize;
 			}
 			else{
-				ultimateStart0=bedEntry.start0-clustergramOpts.upstreamNumBins*clustergramOpts.binSize;
+				ultimateStart0=startBinStart0-clustergramOpts.upstreamNumBins*clustergramOpts.binSize;
 			}
 			ultimateNumBins=clustergramOpts.upstreamNumBins+clustergramOpts.downstreamNumBins;
 		}
