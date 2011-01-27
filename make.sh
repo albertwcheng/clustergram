@@ -18,3 +18,4 @@ if [ ! -e samtools/libbam.a ]; then
 fi
 
 g++ -Wall -o clustergram -I./samtools/ -L./samtools/ -lbam -lm -lz clustergram_main.cpp samtools/libbam.a AdvGetOptCpp/AdvGetOpt.cpp
+g++ -Wall -o bam2Wig -I./samtools/ -L./samtools/ -lbam -lm -lz bamwig_main.cpp samtools/libbam.a AdvGetOptCpp/AdvGetOpt.cpp
