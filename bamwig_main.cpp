@@ -20,6 +20,8 @@
 #include <iostream>
 #include <fstream>
 #include <set>
+#include <math.h>
+#include <sstream>
 using namespace std;
 
 #include <sam.h>
@@ -57,12 +59,122 @@ public:
 	string perChromDir;
 	string lastChrom; //for checking if sorted
 	uint32_t binCoord;
-	uint32_t lastCoord;
+	int lastCoord;
 	int countInBin;
 	samfile_t* pbamfile;
 	ostream* os;
-	bool centerBinCoord;
+	//bool centerBinCoord;
 	int countMode;
+	map<string,string> header;
+	bool outComment;
+	bool outHeader;
+	string headerString;
+	double logbase;
+	bool outputBedGraphExactBound;
+	float readNormalizer;
+	
+	inline void setTrackKeyValuePair(const string&key, const string&value)
+	{
+		if (header.find(key)==header.end()) {
+			header.insert(map<string,string>::value_type(key,value));
+		}else{
+			header[key]=value;
+		}
+		
+	}
+	
+	inline void writeHeaderComment(){
+		
+		(*os)<<"#";
+		(*os)<<" binSize="<<binSize;
+		switch (unitMode) {
+			case UNIT_READS:
+				(*os)<<" unit=Reads";
+				break;
+			case UNIT_RPM:
+				(*os)<<" unit=RPM";
+				break;
+			case UNIT_RPKM:
+				(*os)<<" unit=RPKM";
+				break;
+			default:
+				break;
+		}
+		
+		if(totalNumOfReads>0)
+			(*os)<<" totalNumOfReads="<<totalNumOfReads;
+		
+		switch (phaseMode) {
+			case PHASE_FIXED:
+				(*os)<<" fixedPhased";
+				break;
+			case PHASE_FLEXIBLE:
+				(*os)<<" flexiblePhased";
+				break;
+			default:
+				break;
+		}
+		
+		switch(countMode){
+			case MODE_USE_START:
+				(*os)<<" useReadStart";
+				break;
+			case MODE_PILEUP:
+				(*os)<<" pileup";
+				break;
+			default:
+				break;
+		}
+		
+		if(outputBedGraphExactBound){
+			(*os)<<" outputBedGraphExactEndBound";
+		}
+		
+		if(logbase>0.0){
+			(*os)<<" logbase="<<logbase;
+		}
+		
+		(*os)<<endl;
+	}
+	
+	inline bool hasSpace(const string& str){
+		return (str.find(" ")!=string::npos);
+	}
+	
+	inline void writeHeader(ostream* os){
+		
+		if(headerString=="")
+		{
+			if(outputBedGraphExactBound){
+				headerString="track type=bedGraph";
+			}
+			else{
+				headerString="track type=wiggle_0";
+			}
+			for(map<string,string>::iterator i=header.begin();i!=header.end();i++)
+			{
+				string valueToOutput="";
+				
+				if(hasSpace(i->second)){
+					valueToOutput="\""+i->second+"\"";
+				}
+				else{
+					valueToOutput=i->second;
+				}
+				headerString+=" "+i->first+"="+valueToOutput;
+			}
+		
+		
+		}
+		if (outHeader) {
+			(*os)<<headerString<<endl;
+		}
+		if(outComment){
+			writeHeaderComment();
+		}
+		
+	}
+	
 	
 	
 	inline int startBin(uint32_t newCoord){
@@ -83,9 +195,10 @@ public:
 		return binCoord;
 	}	
 	
+	
 	inline void resetForNewChrom(const string& _chr,uint32_t newCoord){
 		lastCoord=-1;
-		lastChrom=_chr;
+		
 		startBin(newCoord);
 		if(perChrom){
 			ofstream* fos=(ofstream*)os;
@@ -95,11 +208,21 @@ public:
 			}
 			
 			os=new ofstream((perChromDir+_chr+".wig").c_str());
+			
+			writeHeader(os);
+		}else{
+			if(lastChrom==""){
+				writeHeader(os);
+			}
 		}
 		
-		
+		lastChrom=_chr;
 		//print starter line for chromosome
-		(*os)<<"variableStep chrom="<<_chr<<endl;
+		if (outputBedGraphExactBound) {
+			//do nothing
+		}else{
+			(*os)<<"variableStep chrom="<<_chr<<" "<<"span="<<binSize<<endl;
+		}
 	}
 	
 	
@@ -119,13 +242,74 @@ public:
 	
 	bool needANewBin(uint32_t newCoord){
 		//do we need a new bin?
-		return newCoord>binCoord+binSize;
+		return newCoord>=binCoord+binSize; //newCoord is 0-based
 		
 	}
 	
 	void printWigLine(){
 		if(binCoord>=0 && countInBin>0){
-			(*os)<<((centerBinCoord)?(binCoord+binSize/2):binCoord)<<"\t"<<countInBin<<endl;
+			//uint32_t coordToOutput=centerBinCoord?(binCoord+binSize/2):binCoord;
+			uint32_t coordToOutput=binCoord;
+			
+			if (unitMode==UNIT_READS) {
+				if (outputBedGraphExactBound) {
+					if(lastCoord>=int(binCoord+binSize))
+					{
+						cerr<<"Error: lastCoord0 > binCoord + binSize";
+						exit(1);
+					}
+					if(logbase>0.0){
+						(*os)<<lastChrom<<"\t"<<coordToOutput<<"\t"<<(lastCoord+1)<<"\t"<<(log(countInBin)/log(logbase))<<endl; 
+					}else{
+						(*os)<<lastChrom<<"\t"<<coordToOutput<<"\t"<<(lastCoord+1)<<"\t"<<countInBin<<endl; //bed end is 1-based
+					}
+				}else{
+					if(logbase>0.0){
+						(*os)<<(coordToOutput+1)<<"\t"<<(log(countInBin)/log(logbase))<<endl;
+					}else{
+						(*os)<<(coordToOutput+1)<<"\t"<<countInBin<<endl; //wiggle coord is 1-based
+					}
+				}
+			}else{
+				double density;
+				switch (unitMode) {
+					case UNIT_RPKM:
+						density=double(countInBin)*readNormalizer*1e3/(totalNumOfReads*binSize);
+						break;
+					case UNIT_RPM:
+						density=double(countInBin)*readNormalizer/totalNumOfReads;
+						break;
+					default:
+						cerr<<"unknown unit"<<endl;
+						break;
+				}
+				
+				if(logbase>0.0){
+					density=log(density+1)/log(logbase);
+				}
+				
+				
+				if (outputBedGraphExactBound) {
+					if(lastCoord>=int(binCoord+binSize))
+					{
+						cerr<<"Error: lastCoord0 > binCoord + binSize";
+						exit(1);
+					}
+					
+					
+					if (unitMode==UNIT_RPKM){ //need to correct for density
+						density=double(countInBin)*readNormalizer*1e3/(totalNumOfReads*lastCoord-coordToOutput);
+						if(logbase>0.0){
+							density=log(density+1)/log(logbase);
+						}
+					} //else no need to correct
+					
+					(*os)<<lastChrom<<"\t"<<coordToOutput<<"\t"<<(lastCoord+1)<<"\t"<<density<<endl; //bed end is 1-based
+				}else{
+					(*os)<<(coordToOutput+1)<<"\t"<<density<<endl; //wiggle coord is 1-based
+				}
+			}
+			
 		}
 	}
 	
@@ -213,6 +397,13 @@ int countFunc(uint32_t tid,uint32_t pos,int n,const bam_pileup1_t* pl,void *data
 	string chrom=bamWigOpts->getChromName(tid);
 	if(chrom!=bamWigOpts->lastChrom){ //see if new chrom
 		bamWigOpts->resetForNewChrom(chrom,pos);
+		cerr<<"passing through chromosome "<<chrom<<endl;
+	}
+	
+	
+	if(int(pos)<bamWigOpts->lastCoord){
+		cerr<<"bam file is not sorted. Please sort and run again pos="<<pos<<" lastcoord="<<bamWigOpts->lastCoord<<endl;
+		exit(1);
 	}
 	
 	if(bamWigOpts->needANewBin(pos)){
@@ -220,7 +411,8 @@ int countFunc(uint32_t tid,uint32_t pos,int n,const bam_pileup1_t* pl,void *data
 		bamWigOpts->startBin(pos);
 	}
 	
-	bamWigOpts->countInBin++;
+	bamWigOpts->lastCoord=pos;
+	bamWigOpts->countInBin+=n;
 	
 	return 1;
 	
@@ -289,10 +481,14 @@ int runBamWig(bamwig_opts& bamWigOpts){
 	
 	switch (bamWigOpts.countMode) {
 		case MODE_USE_START:
-			sampileup(bamWigOpts.pbamfile,-1,countFunc,&bamWigOpts);
+			cerr<<"call sampass"<<endl;
+			sampass(bamWigOpts.pbamfile,countFunc,&bamWigOpts);
+			
+			
 			break;
 		case MODE_PILEUP:
-			sampass(bamWigOpts.pbamfile,countFunc,&bamWigOpts);
+			cerr<<"call sampileup"<<endl;
+			sampileup(bamWigOpts.pbamfile,-1,countFunc,&bamWigOpts);
 			break;
 		default:
 			cerr<<"unknown count mode. abort"<<endl;
@@ -319,16 +515,28 @@ void printUsage(string programName){
 	outArgsHelp("--@import-args","filename load arguments from tab delimited file");
 	cerr<<endl;
 	cerr<<"Unit options:"<<endl;
-	outArgsHelp("[default] --rpkm-auto","output read per kilobase per million reads. Automatically find the total number of reads");
-	outArgsHelp("--rpm-auto","output read per million reads. Automatically find the total number of reads");
-	outArgsHelp("--rpkm <totalNumOfReads>","total number of mapped reads. Required if --reads-per-million is on");
+	//outArgsHelp("[default] --rpkm-auto","output read per kilobase per million reads. Automatically find the total number of reads");
+	outArgsHelp("--rpm-auto [default]","output read per million reads. Automatically find the total number of reads");
+	//outArgsHelp("--rpkm <totalNumOfReads>","total number of mapped reads. Required if --reads-per-million is on");
 	outArgsHelp("--rpm <totalNumOfReads>","output read per millions using the provided total number of reads");
-	outArgsHelp("--center-bin-coord","output the center of bin as bin coordinate");
+	outArgsHelp("--read-counts","just output the read count in each bin");
+	//outArgsHelp("--center-bin-coord","output the center of bin as bin coordinate");
+	//outArgsHelp("--bedgraph-exact-end","output as bed graph and exact end as the last read in bin so that bin end bound is not fixed");
+	outArgsHelp("--log b","output the values as log(x+1) for density or log(x) for readcounts. logged in logbase b");
+	outArgsHelp("--no-header","do not output track header");
+	outArgsHelp("--no-comment","do not output program parameters as a comment line");
+	outArgsHelp("--read-normalizer <normalization>","change to something else other than per millions (so that the one in log(x+1) do not take over small values of x). e.g., 1000 for RPK [reads per thousand reads]");
 	cerr<<"Operational:"<<endl;
 	outArgsHelp("--bin-size <binSize>","specify bin size. Default is 20");
-	outArgsHelp("[default] --use-start or --pileup","--use-start: count if start of read fall in bin. --pileup: pile up reads");
-	outArgsHelp("[default] --flexible-phase or --fixed-phase","--flexible-phase: start a sequence of bin on reaching the first read of that sequence of bins. --fixed-phase: start a sequence of bin on a fixed interval from chrom start");
-	
+	//outArgsHelp("--use-start [default]  or --pile-up","--use-start: count if start of read fall in bin. --pileup: pile up reads");
+	//--pile-up has some bugs yet to be fixed.
+	outArgsHelp("--flexible-phase [default] or --fixed-phase","--flexible-phase: start a sequence of bin on reaching the first read of that sequence of bins. --fixed-phase: start a sequence of bin on a fixed interval from chrom start");
+	outArgsHelp("--per-chrom <prefix>","specify that output one wig per chromosome. prefix should include the last / for folders");
+	outArgsHelp("--track-name","specify track label. The one on the left [Default: filename]");
+	outArgsHelp("--track-description","specify track description. The one in the center [Default: filename]");
+	outArgsHelp("--set key --with-value value","add to track these key value pairs. e.g., --set visibility --with-value full");
+	cerr<<"References:"<<endl;
+	cerr<<"For more description of the format: see UCSC documentation at http://genome.ucsc.edu/goldenPath/help/wiggle.html"<<endl;
 }
 
 int main(int argc,char*argv[])
@@ -340,16 +548,26 @@ int main(int argc,char*argv[])
 	
 	//optional:
 	long_options.push_back("rpm=");
-	long_options.push_back("rpkm=");
+	//long_options.push_back("rpkm=");
 	long_options.push_back("rpm-auto");
-	long_options.push_back("rpkm-auto");
+	//long_options.push_back("rpkm-auto");
 	long_options.push_back("pile-up");
 	long_options.push_back("use-start");
 	long_options.push_back("fixed-phase");
 	long_options.push_back("flexible-phase");
-	long_options.push_back("per-chr=");
+	long_options.push_back("per-chrom=");
 	long_options.push_back("bin-size=");
-	long_options.push_back("center-bin-coord");
+	//long_options.push_back("center-bin-coord");
+	long_options.push_back("read-counts");
+	long_options.push_back("track-name=");
+	long_options.push_back("track-description=");
+	long_options.push_back("set=");
+	long_options.push_back("with-value=");
+	long_options.push_back("bedgraph-exact-end");
+	long_options.push_back("log=");
+	long_options.push_back("no-header");
+	long_options.push_back("no-comment");
+	long_options.push_back("read-normalizer");
 	
 	map<string,string> optmap;
 
@@ -384,32 +602,52 @@ int main(int argc,char*argv[])
 	bamwig_opts bamwigOpts;
 	
 	//defaults:
-	bamwigOpts.unitMode=UNIT_RPKM;
+	bamwigOpts.unitMode=UNIT_RPM;
 	bamwigOpts.getTotalNumOfReadsFromBam=true;
 	bamwigOpts.totalNumOfReads=-1;
 	bamwigOpts.phaseMode=PHASE_FLEXIBLE;
 	bamwigOpts.perChrom=false;
 	bamwigOpts.perChromDir="";
+	bamwigOpts.outputBedGraphExactBound=false;
 	bamwigOpts.countMode=MODE_USE_START;
+	bamwigOpts.outHeader=true;
+	bamwigOpts.outComment=true;
+	
 	//get args
 	bamwigOpts.bamfile=argsFinal.args[0];
-	bamwigOpts.centerBinCoord=false;
+	//bamwigOpts.centerBinCoord=false;
 	//get opts
 	bamwigOpts.binSize=atoi(getOptValue(optmap,"--bin-size","20").c_str());
-	if(hasOpt(optmap,"--rpkm-auto")){
+	
+	/*if(hasOpt(optmap,"--rpkm-auto")){
 		bamwigOpts.unitMode=UNIT_RPKM;
 		bamwigOpts.getTotalNumOfReadsFromBam=true;
-	}else if(hasOpt(optmap,"--rpm-auto")){
+		
+	}else */if(hasOpt(optmap,"--rpm-auto")){
 		bamwigOpts.unitMode=UNIT_RPM;
 		bamwigOpts.getTotalNumOfReadsFromBam=true;
-	}else if(hasOpt(optmap,"--rpkm")){
+	}/*else if(hasOpt(optmap,"--rpkm")){
 		bamwigOpts.unitMode=UNIT_RPKM;
 		bamwigOpts.totalNumOfReads=atoi(getOptValue(optmap,"--rpkm").c_str());
-	}else if(hasOpt(optmap,"--rpm")){
+		bamwigOpts.getTotalNumOfReadsFromBam=false;
+	}*/else if(hasOpt(optmap,"--rpm")){
 		bamwigOpts.unitMode=UNIT_RPM;
 		bamwigOpts.totalNumOfReads=atoi(getOptValue(optmap,"--rpm").c_str());
+		bamwigOpts.getTotalNumOfReadsFromBam=false;
+	}else if(hasOpt(optmap,"--read-counts")){
+		bamwigOpts.unitMode=UNIT_READS;
+		bamwigOpts.getTotalNumOfReadsFromBam=false;
+		//bamwigOpts.totalNumOfReads=0;
 	}
 	
+	
+	if(hasOpt(optmap,"--no-comment")){
+		bamwigOpts.outComment=false;
+	}
+	
+	if(hasOpt(optmap,"--no-header")){
+		bamwigOpts.outHeader=false;
+	}
 	
 	if(hasOpt(optmap,"--use-start")){
 		bamwigOpts.countMode=MODE_USE_START;
@@ -433,8 +671,46 @@ int main(int argc,char*argv[])
 		bamwigOpts.phaseMode=PHASE_FIXED;
 	}
 	
-	if(hasOpt(optmap,"--center-bin-coord")){
+	/*if(hasOpt(optmap,"--center-bin-coord")){
 		bamwigOpts.centerBinCoord=true;
+	}*/
+	
+	
+	if(hasOpt(optmap,"--bedgraph-exact-end")){
+		bamwigOpts.outputBedGraphExactBound=true;
+		if(bamwigOpts.countMode==MODE_USE_START){
+			cerr<<"cannot use start for counting, use pileup: --bedgraph-exact-end --pile-up"<<endl;
+			return 1;
+		}
+	}
+	
+	
+	
+	bamwigOpts.setTrackKeyValuePair("name",getOptValue(optmap,"--track-name",bamwigOpts.bamfile)); //default is filename
+	bamwigOpts.setTrackKeyValuePair("description",getOptValue(optmap,"--track-description",bamwigOpts.bamfile));
+	
+	string toSetKey;
+	
+	for(vector<OptStruct>::iterator i=argsFinal.opts.begin();i!=argsFinal.opts.end();i++){
+		if(i->opname=="--set"){
+			toSetKey=i->opvalue;
+		}else if(i->opname=="--with-value") {
+			if(toSetKey==""){
+				cerr<<"error setting key-value of track header: value given without key: use --set key --with-value value"<<endl;
+				return 1;
+			}
+			bamwigOpts.setTrackKeyValuePair(toSetKey,i->opvalue);
+			toSetKey="";
+		}
+		
+	}
+	
+	bamwigOpts.logbase=atof(getOptValue(optmap,"--log","-1.0").c_str());
+	bamwigOpts.readNormalizer=atof(getOptValue(optmap,"--read-normalizer","1000000.0").c_str());
+	if(toSetKey!=""){
+		//a lone key!!
+		cerr<<"error setting key-value of track header: key not matched by a value: use --set key --with-value value"<<endl;
+		return 1;
 	}
 	
 	return runBamWig(bamwigOpts);
