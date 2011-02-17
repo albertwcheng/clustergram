@@ -246,7 +246,7 @@ void fetch_bin_values(vector<double>& voutput,samfile_t* bamfile,bam_index_t*idx
 	int binStart0=ultimateStart0;
 	for(int i=0;i<ultimateNumBins;i++){
 		int countOfThisBin=fetch_count_region(bamfile,idx,chrom,binStart0,binStart0+binSize,true);
-		voutput.push_back(countOfThisBin/normalization);
+		voutput.push_back(countOfThisBin*normalization);
 		binStart0+=binSize;
 											  
 	}
@@ -309,6 +309,7 @@ int runClustergram(clustergram_opts& clustergramOpts){
 	double normalization=1.0;
 	if(clustergramOpts.readPerMillion){
 		normalization=1e6/double(clustergramOpts.totalNumOfReads);
+		cerr<<"normalization factor is "<<normalization<<endl;
 	}
 	
 	
@@ -381,10 +382,11 @@ int runClustergram(clustergram_opts& clustergramOpts){
 
 		int center0=bedEntry.getLength()/2+bedEntry.start0;
 		
+		int startBinStart0;
 		
 		if(clustergramOpts.alignStartBinCenter){
 			
-			int startBinStart0=center0-clustergramOpts.binSize/2;
+			startBinStart0=center0-clustergramOpts.binSize/2;
 			if(bedEntry.strand==STRAND_REVERSE && !clustergramOpts.useGenomicStrand){
 				//use reverse
 				reverseData=true;
@@ -399,7 +401,7 @@ int runClustergram(clustergram_opts& clustergramOpts){
 			
 		}
 		else {
-			int startBinStart0=center0;
+			startBinStart0=center0;
 			
 			if(bedEntry.strand==STRAND_REVERSE && !clustergramOpts.useGenomicStrand){
 				reverseData=true;
@@ -433,7 +435,7 @@ int runClustergram(clustergram_opts& clustergramOpts){
 		
 		fetch_bin_values(binvalues,bamfile,idx,bedEntry.chrom, ultimateStart0, ultimateNumBins, clustergramOpts.binSize,normalization);
 		
-		sprintf(buff,"%s_%d",bedEntry.chrom.c_str(),bedEntry.start0+1);
+		sprintf(buff,"%s_%d",bedEntry.chrom.c_str(),startBinStart0+1);
 		voutput.push_back(buff); //chr1_12512
 		voutput.push_back(bedEntry.name); //GeneName
 		

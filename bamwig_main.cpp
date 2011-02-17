@@ -271,7 +271,7 @@ public:
 					}
 				}
 			}else{
-				double density;
+				double density=0.0;
 				switch (unitMode) {
 					case UNIT_RPKM:
 						density=double(countInBin)*readNormalizer*1e3/(totalNumOfReads*binSize);
