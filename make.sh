@@ -27,5 +27,10 @@ if [ ! -e samtools/libbam.a ]; then
 	exit
 fi
 
+echo "making clustergram"
 g++ -Wall -O3 -o clustergram -I./samtools/ -L./samtools/ -lbam -lm -lz clustergram_main.cpp samtools/libbam.a AdvGetOptCpp/AdvGetOpt.cpp
+
+echo "making bam2Wig"
 g++ -Wall -O3 -o bam2Wig -I./samtools/ -L./samtools/ -lbam -lm -lz bamwig_main.cpp samtools/libbam.a AdvGetOptCpp/AdvGetOpt.cpp
+
+echo "DONE!"
