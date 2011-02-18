@@ -1,7 +1,17 @@
 
 
+if [ $# -ge 1 ];then
+	if [[ $1 == "-d" ]]; then
+		echo "trying to download samtools from http://cdnetworks-us-1.dl.sourceforge.net/project/samtools/samtools/0.1.12/samtools-0.1.12a.tar.bz2"	fi
+		wget http://cdnetworks-us-1.dl.sourceforge.net/project/samtools/samtools/0.1.12/samtools-0.1.12a.tar.bz2
+		tar -xvf samtools-0.1.12a.tar.bz2
+		mv samtools-0.1.12a samtools
+	fi
+fi
+
+
 if [ ! -e samtools ]; then
-  echo "samtools not exist. downlaod samtools and put inside this folder. abort"
+  echo "samtools not exist. downlaod samtools and put inside this folder. abort. Or automatically download a version dated 2/17/2011 by specifying -d when running this make.sh"
   exit
 fi
 
